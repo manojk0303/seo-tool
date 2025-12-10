@@ -7,25 +7,24 @@ const _inter = Inter({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "SEO Insights - Professional SEO Research Tool",
+  title: "SEO Insights - Professional SEO Research Tool by OfficeX Appstore",
   description: "Powerful SEO tool for keyword research, domain analytics, and paid ads analysis powered by DataForSEO.",
-  generator: "v0.app",
   icons: {
     icon: [
       {
-        url: "/icon-light-32x32.png",
+        url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSCg9HR4EafHkpEqIK60rrzZtETFnlWaIKBIg&s",
         media: "(prefers-color-scheme: light)",
       },
       {
-        url: "/icon-dark-32x32.png",
+        url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSCg9HR4EafHkpEqIK60rrzZtETFnlWaIKBIg&s",
         media: "(prefers-color-scheme: dark)",
       },
       {
-        url: "/icon.svg",
+        url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSCg9HR4EafHkpEqIK60rrzZtETFnlWaIKBIg&s",
         type: "image/svg+xml",
       },
     ],
-    apple: "/apple-icon.png",
+    apple: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSCg9HR4EafHkpEqIK60rrzZtETFnlWaIKBIg&s",
   },
 }
 
