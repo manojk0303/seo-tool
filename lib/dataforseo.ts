@@ -1,18 +1,10 @@
-const API_BASE_URL = "https://api.dataforseo.com/v3"
-
-function getAuthHeader(): string {
-  const login = process.env.DATAFORSEO_LOGIN || ""
-  const password = process.env.DATAFORSEO_PASSWORD || ""
-  return Buffer.from(`${login}:${password}`).toString("base64")
-}
-
 // lib/dataforseo.ts
+const API_BASE_URL = "https://api.dataforseo.com/v3"
 
 export async function dataForSEORequest<T>(
   endpoint: string,
   data: any
 ): Promise<T> {
-  // Get credentials from environment variables
   const login = process.env.DATAFORSEO_LOGIN
   const password = process.env.DATAFORSEO_PASSWORD
 
@@ -22,7 +14,6 @@ export async function dataForSEORequest<T>(
     )
   }
 
-  // Encode credentials in Base64 for Basic Auth
   const credentials = Buffer.from(`${login}:${password}`).toString("base64")
 
   const response = await fetch(
@@ -46,7 +37,6 @@ export async function dataForSEORequest<T>(
 
   const result = await response.json()
 
-  // Check DataForSEO specific status codes
   if (result.status_code !== 20000) {
     throw new Error(
       result.status_message || "DataForSEO API request failed"
@@ -56,20 +46,8 @@ export async function dataForSEORequest<T>(
   return result as T
 }
 
-export const LOCATIONS = [
-  { code: 2840, name: "United States" },
-  { code: 2826, name: "United Kingdom" },
-  { code: 2124, name: "Canada" },
-  { code: 2036, name: "Australia" },
-  { code: 2276, name: "Germany" },
-] as const
-
-export const LANGUAGES = [
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-] as const
+// Import from the new locations file
+export { ALL_GOOGLE_LOCATIONS as LOCATIONS, ALL_LANGUAGES as LANGUAGES } from './locations'
 
 export function formatNumber(num: number | null | undefined): string {
   if (num === null || num === undefined) return "N/A"

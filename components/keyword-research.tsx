@@ -1,7 +1,8 @@
+// components/keyword-research.tsx - Fixed competition display
 "use client"
 
 import { useState } from "react"
-import { Search, Download, FileJson, Printer, Loader2, TrendingUp, BarChart3, Zap } from "lucide-react"
+import { Search, Download, FileJson, Printer, Loader2, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { LOCATIONS, LANGUAGES, formatNumber, formatCurrency } from "@/lib/dataforseo"
+import {LOCATIONS_BY_REGION, searchLocations,} from "@/lib/locations"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { ChevronDown } from "lucide-react"
+// import { LOCATIONS, LANGUAGES, formatNumber, formatCurrency } from "@/lib/dataforseo"
 import { exportToCSV, exportToJSON, exportToPDF } from "@/lib/export-utils"
 import {
   BarChart,
@@ -24,8 +29,14 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
-  ReferenceLine,
 } from "recharts"
+import { useMemo } from 'react'
+
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent
+} from "@/components/ui/popover"
 
 interface KeywordData {
   keyword: string
@@ -38,14 +49,19 @@ interface KeywordData {
   isSeed?: boolean
 }
 
+// Helper function to get competition level color
 const getCompetitionColor = (value: number) => {
   if (value >= 0.7) return "text-red-600 bg-red-50"
   if (value >= 0.4) return "text-yellow-600 bg-yellow-50"
   return "text-green-600 bg-green-50"
 }
 
+// Helper function to get competition text
 const getCompetitionText = (level: string, value: number) => {
+  // If we have a level string, use it
   if (level && level !== "Unknown") return level
+  
+  // Otherwise, calculate from value
   if (value >= 0.7) return "HIGH"
   if (value >= 0.4) return "MEDIUM"
   return "LOW"
@@ -59,6 +75,19 @@ export function KeywordResearch() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<KeywordData[]>([])
+  const [locationOpen, setLocationOpen] = useState(false)
+  const [locationSearch, setLocationSearch] = useState("")
+
+  // Get selected location name
+  const selectedLocation = useMemo(() => {
+    return LOCATIONS.find(l => l.code.toString() === location)
+  }, [location])
+
+  // Filter locations based on search
+  const filteredLocations = useMemo(() => {
+    if (!locationSearch) return LOCATIONS
+    return searchLocations(locationSearch)
+  }, [locationSearch])
 
   const handleSearch = async () => {
     if (!keyword.trim()) {
@@ -88,7 +117,7 @@ export function KeywordResearch() {
       }
 
       setResults(data.keywords || [])
-
+      
       if (!data.keywords || data.keywords.length === 0) {
         setError("No keywords found. Try a different keyword or adjust your filters.")
       }
@@ -106,6 +135,7 @@ export function KeywordResearch() {
       { key: "keywordDifficulty", label: "Difficulty" },
       { key: "cpc", label: "CPC" },
       { key: "competition", label: "Competition Level" },
+      { key: "competitionValue", label: "Competition Score" },
     ])
   }
 
@@ -113,50 +143,22 @@ export function KeywordResearch() {
     exportToJSON(results, `keywords-${keyword}`)
   }
 
-  // Top 10 keywords by volume (cleaner chart)
   const topKeywordsByVolume = [...results]
     .sort((a, b) => b.searchVolume - a.searchVolume)
-    .slice(0, 10)
+    .slice(0, 20)
     .map((kw) => ({
-      keyword: kw.keyword.length > 25 ? `${kw.keyword.slice(0, 25)}...` : kw.keyword,
+      keyword: kw.keyword.length > 20 ? `${kw.keyword.slice(0, 20)}...` : kw.keyword,
       fullKeyword: kw.keyword,
       volume: kw.searchVolume,
     }))
 
-  // Better difficulty distribution
-  const difficultyDistribution = [
-    {
-      range: "Easy (0-30)",
-      count: results.filter((k) => k.keywordDifficulty <= 30).length,
-      color: "hsl(var(--chart-2))",
-    },
-    {
-      range: "Medium (31-60)",
-      count: results.filter((k) => k.keywordDifficulty > 30 && k.keywordDifficulty <= 60).length,
-      color: "hsl(var(--chart-3))",
-    },
-    {
-      range: "Hard (61-100)",
-      count: results.filter((k) => k.keywordDifficulty > 60).length,
-      color: "hsl(var(--chart-1))",
-    },
-  ]
-
-  // Opportunity keywords (low difficulty + high volume)
-  const opportunityKeywords = results
-    .filter((k) => k.keywordDifficulty < 40 && k.searchVolume > 1000)
-    .sort((a, b) => b.searchVolume - a.searchVolume)
-    .slice(0, 10)
-
-  // Volume vs CPC scatter (cleaner)
-  const volumeVsCPC = results
-    .filter((k) => k.searchVolume > 0 && k.cpc > 0)
+  const difficultyVsVolume = results
+    .filter((kw) => kw.searchVolume > 0)
     .slice(0, 50)
-    .map((k) => ({
-      volume: k.searchVolume,
-      cpc: k.cpc,
-      keyword: k.keyword,
-      difficulty: k.keywordDifficulty,
+    .map((kw) => ({
+      difficulty: kw.keywordDifficulty,
+      volume: kw.searchVolume,
+      keyword: kw.keyword,
     }))
 
   return (
@@ -182,19 +184,68 @@ export function KeywordResearch() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Select value={location} onValueChange={setLocation}>
-                <SelectTrigger id="location">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LOCATIONS.map((loc) => (
-                    <SelectItem key={loc.code} value={loc.code.toString()}>
-                      {loc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="location">Location ({LOCATIONS.length} available)</Label>
+              <Popover open={locationOpen} onOpenChange={setLocationOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={locationOpen}
+                    className="w-full justify-between"
+                  >
+                    {selectedLocation ? selectedLocation.name : "Select location..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput 
+                      placeholder="Search locations..." 
+                      value={locationSearch}
+                      onValueChange={setLocationSearch}
+                    />
+                    <CommandList className="max-h-[300px]">
+                      <CommandEmpty>No location found.</CommandEmpty>
+                      {Object.entries(LOCATIONS_BY_REGION).map(([region, locs]) => (
+                        <CommandGroup key={region} heading={region}>
+                          {locs.slice(0, 10).map((loc) => (
+                            <CommandItem
+                              key={loc.code}
+                              value={`${loc.name}-${loc.code}`}
+                              onSelect={() => {
+                                setLocation(loc.code.toString())
+                                setLocationOpen(false)
+                                setLocationSearch("")
+                              }}
+                            >
+                              <span className="text-xs text-muted-foreground mr-2">{loc.countryCode}</span>
+                              {loc.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      ))}
+                      {locationSearch && filteredLocations.length > 0 && (
+                        <CommandGroup heading="Search Results">
+                          {filteredLocations.map((loc) => (
+                            <CommandItem
+                              key={loc.code}
+                              value={`${loc.name}-${loc.code}`}
+                              onSelect={() => {
+                                setLocation(loc.code.toString())
+                                setLocationOpen(false)
+                                setLocationSearch("")
+                              }}
+                            >
+                              <span className="text-xs text-muted-foreground mr-2">{loc.countryCode}</span>
+                              {loc.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label htmlFor="language">Language</Label>
@@ -214,13 +265,7 @@ export function KeywordResearch() {
           </div>
           <div className="space-y-2">
             <Label>Number of Results: {limit}</Label>
-            <Slider
-              value={[limit]}
-              onValueChange={([value]) => setLimit(value)}
-              min={10}
-              max={100}
-              step={10}
-            />
+            <Slider value={[limit]} onValueChange={([value]) => setLimit(value)} min={10} max={100} step={10} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleSearch} disabled={loading}>
@@ -253,9 +298,7 @@ export function KeywordResearch() {
               </>
             )}
           </div>
-          {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
+          {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
         </CardContent>
       </Card>
 
@@ -298,40 +341,40 @@ export function KeywordResearch() {
 
           {/* Charts */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Top Keywords - Horizontal Bar Chart */}
+            {/* Top Keywords Chart */}
             {topKeywordsByVolume.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <TrendingUp className="h-4 w-4 text-primary" />
-                    Top 10 Keywords by Volume
+                    Top Keywords by Search Volume
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={topKeywordsByVolume} layout="vertical" margin={{ left: 150, right: 20 }}>
+                      <BarChart data={topKeywordsByVolume} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                        <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <YAxis
                           dataKey="keyword"
                           type="category"
-                          width={140}
+                          width={120}
                           stroke="hsl(var(--muted-foreground))"
-                          fontSize={11}
-                          interval={0}
+                          fontSize={10}
                         />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: "hsl(var(--card))",
                             border: "1px solid hsl(var(--border))",
                             borderRadius: "8px",
-                            fontSize: "12px",
                           }}
-                          formatter={(value: number) => [formatNumber(value), "Volume"]}
-                          labelFormatter={(label) => label}
+                          formatter={(value: number, _, props) => [
+                            formatNumber(value),
+                            props.payload.fullKeyword,
+                          ]}
                         />
-                        <Bar dataKey="volume" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="volume" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -339,157 +382,70 @@ export function KeywordResearch() {
               </Card>
             )}
 
-            {/* Difficulty Distribution */}
-            {difficultyDistribution.some((d) => d.count > 0) && (
+            {/* Difficulty vs Volume Scatter */}
+            {difficultyVsVolume.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <BarChart3 className="h-4 w-4 text-primary" />
-                    Difficulty Distribution
-                  </CardTitle>
+                  <CardTitle className="text-base">Keyword Opportunity Map</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={difficultyDistribution}>
+                      <ScatterChart>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis
-                          dataKey="range"
+                          type="number"
+                          dataKey="difficulty"
+                          name="Difficulty"
                           stroke="hsl(var(--muted-foreground))"
                           fontSize={12}
-                          angle={-15}
-                          textAnchor="end"
-                          height={60}
                         />
-                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                        <YAxis
+                          type="number"
+                          dataKey="volume"
+                          name="Volume"
+                          stroke="hsl(var(--muted-foreground))"
+                          fontSize={12}
+                          tickFormatter={formatNumber}
+                        />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: "hsl(var(--card))",
                             border: "1px solid hsl(var(--border))",
                             borderRadius: "8px",
                           }}
-                          formatter={(value: number) => [value, "Keywords"]}
+                          formatter={(value: number, name: string) => [
+                            name === "volume" ? formatNumber(value) : value,
+                            name === "volume" ? "Search Volume" : "Difficulty",
+                          ]}
                         />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                          {difficultyDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Scatter data={difficultyVsVolume} fill="hsl(var(--primary))">
+                          {difficultyVsVolume.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={
+                                entry.difficulty < 30 && entry.volume > 1000
+                                  ? "hsl(var(--chart-2))"
+                                  : "hsl(var(--primary))"
+                              }
+                            />
                           ))}
-                        </Bar>
-                      </BarChart>
+                        </Scatter>
+                      </ScatterChart>
                     </ResponsiveContainer>
                   </div>
+                  <p className="mt-2 text-xs text-muted-foreground text-center">
+                    Green dots = Low difficulty + High volume (best opportunities)
+                  </p>
                 </CardContent>
               </Card>
             )}
           </div>
 
-          {/* Volume vs CPC Scatter */}
-          {volumeVsCPC.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Zap className="h-4 w-4 text-primary" />
-                  Search Volume vs CPC
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-2">Higher right = High value keywords</p>
-              </CardHeader>
-              <CardContent>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis
-                        type="number"
-                        dataKey="volume"
-                        name="Search Volume"
-                        stroke="hsl(var(--muted-foreground))"
-                        fontSize={12}
-                        tickFormatter={formatNumber}
-                      />
-                      <YAxis
-                        type="number"
-                        dataKey="cpc"
-                        name="CPC ($)"
-                        stroke="hsl(var(--muted-foreground))"
-                        fontSize={12}
-                        tickFormatter={(val) => `$${val.toFixed(0)}`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                          fontSize: "12px",
-                        }}
-                        cursor={{ strokeDasharray: "3 3" }}
-                        formatter={(value: number, name: string) => {
-                          if (name === "volume") return [formatNumber(value), "Search Volume"]
-                          if (name === "cpc") return [formatCurrency(value), "CPC"]
-                          return value
-                        }}
-                        labelFormatter={(label) => `Keywords`}
-                      />
-                      <Scatter
-                        data={volumeVsCPC}
-                        fill="hsl(var(--primary))"
-                        fillOpacity={0.6}
-                      >
-                        {volumeVsCPC.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={entry.difficulty < 40 ? "hsl(var(--chart-2))" : "hsl(var(--primary))"}
-                            opacity={entry.difficulty < 40 ? 0.8 : 0.5}
-                          />
-                        ))}
-                      </Scatter>
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Green dots = Lower difficulty | Blue dots = Higher difficulty
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Opportunity Keywords */}
-          {opportunityKeywords.length > 0 && (
-            <Card className="border-green-200 bg-green-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base text-green-900">
-                  <Zap className="h-4 w-4 text-green-600" />
-                  Quick Wins ({opportunityKeywords.length} keywords)
-                </CardTitle>
-                <p className="text-xs text-green-700 mt-1">
-                  Low difficulty (&lt;40) + High volume (&gt;1000) = Best opportunities
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {opportunityKeywords.map((kw, index) => (
-                    <div
-                      key={index}
-                      className="rounded-lg bg-white p-3 border border-green-200 hover:border-green-400 transition-colors"
-                    >
-                      <p className="font-medium text-sm truncate" title={kw.keyword}>
-                        {kw.keyword}
-                      </p>
-                      <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                        <span>📊 {formatNumber(kw.searchVolume)}</span>
-                        <span>🎯 {kw.keywordDifficulty}</span>
-                        <span>💰 {formatCurrency(kw.cpc)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Full Keywords Table */}
+          {/* Keywords Table */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">All Keywords ({results.length})</CardTitle>
+              <CardTitle className="text-base">Keyword Results ({results.length})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -505,7 +461,7 @@ export function KeywordResearch() {
                   </thead>
                   <tbody>
                     {results.map((kw, index) => (
-                      <tr key={index} className="border-b border-border/50 hover:bg-muted/30">
+                      <tr key={index} className="border-b border-border/50">
                         <td className="py-3 font-medium max-w-[300px]">
                           <div className="flex items-center gap-2">
                             {kw.isSeed && (
@@ -518,10 +474,10 @@ export function KeywordResearch() {
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 text-right font-medium text-sm">{formatNumber(kw.searchVolume)}</td>
+                        <td className="py-3 text-right font-medium">{formatNumber(kw.searchVolume)}</td>
                         <td className="py-3 text-center">
                           <span
-                            className={`inline-block rounded px-2 py-1 text-xs font-semibold ${
+                            className={`inline-block rounded px-2 py-1 text-xs font-medium ${
                               kw.keywordDifficulty > 70
                                 ? "bg-red-100 text-red-700"
                                 : kw.keywordDifficulty > 40
@@ -532,14 +488,10 @@ export function KeywordResearch() {
                             {kw.keywordDifficulty}
                           </span>
                         </td>
-                        <td className="py-3 text-right text-sm font-medium">{formatCurrency(kw.cpc)}</td>
+                        <td className="py-3 text-right">{formatCurrency(kw.cpc)}</td>
                         <td className="py-3 text-center">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span
-                              className={`rounded px-2 py-0.5 text-xs font-semibold ${getCompetitionColor(
-                                kw.competitionValue,
-                              )}`}
-                            >
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${getCompetitionColor(kw.competitionValue)}`}>
                               {getCompetitionText(kw.competition, kw.competitionValue)}
                             </span>
                             <span className="text-xs text-muted-foreground">
